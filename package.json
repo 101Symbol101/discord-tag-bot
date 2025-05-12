@@ -12,7 +12,6 @@
     "discord.js": "^14.19.1",
     "the-tagger": "file:"
   },
-  "devDependencies": {},
   "keywords": [],
   "description": ""
 }

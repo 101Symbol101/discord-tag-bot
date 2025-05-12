@@ -19,11 +19,7 @@ Changes:
 */
 
 const { SlashCommandBuilder,
-    Collection,
     MessageFlags,
-    EmbedBuilder,
-    subtext,
-    userMention,
     inlineCode,
     heading,
     HeadingLevel,
@@ -32,20 +28,10 @@ const { SlashCommandBuilder,
     SeparatorSpacingSize,
     quote,
     chatInputApplicationCommandMention } = require('discord.js');
-
-const fs = require('fs').promises;
 const path = require('node:path');
-const datapath = path.join(__dirname, "..", "..", "data", "tags.json");
+const { tagdata, FindTag, IncreaseTagUsage, GetTagRanking, TagEmbedBuilder } = require(path.join(__dirname, "..", "..", "data", "js", "tags.js"));
 
 module.exports = {
-    async first() {
-        const data = await require(datapath);
-        tagdata = new Collection();
-        for (const [key, value] of Object.entries(data)) {
-            tagdata.set(key, value)
-        }
-        this.tagdata = tagdata;
-    },
     data: new SlashCommandBuilder()
     .setName('tag')
     .setDescription('Retrive a tag')
@@ -94,59 +80,17 @@ module.exports = {
         }
         await interaction.respond(outputlist.slice(0, 25))
     },
-    FindTag(input) {
-        const result = tagdata.get(input) ?? tagdata.find((tag) => tag.flags.includes(input)) ?? null;
-        if (result) {
-            result.key = input;
-        }
-        return result;
-    },
-    ReloadTagdata(){
-        this.tagdata.clear();
-        this.first()
-    },
-    // get the ranking of a tag using its key
-    GetTagRanking(tagkey) {
-        const ranking = new Collection();
-        for (const [tagname, tagobj] of tagdata.entries()) {
-            if (ranking.has(tagobj.uses))
-                ranking.set(tagobj.uses, ranking.get(tagobj.uses).concat(tagname));
-            else
-                ranking.set(tagobj.uses, [tagname]);
-        }
-        ranking.sort((x, y) => y - x); // sort by uses descending
-        let actualRank = 0;
-        for (const [rank, tags] of ranking.entries()) {
-            actualRank++;
-            if (tags.includes(tagkey)) {
-                return actualRank;
-            }
-        }
-        return null;
-    },
-    IncreaseTagUsage(tagkey) {
-        fs.readFile(datapath)
-        .then(body => JSON.parse(body))
-            .then(json => {
-            json[tagkey].uses = json[tagkey].uses + 1;
-            return json
-        })
-        .then(json => JSON.stringify(json, null, 2))
-        .then(body => fs.writeFile(datapath, body))
-        .then(this.ReloadTagdata())
-        .catch(error => console.log(error))
-    },
     async execute(interaction) {
-        const tag = this.FindTag(interaction.options.getString('query').trim())
+        const tag = FindTag('flags', interaction.options.getString('query').trim())
         if (!tag)
             return await interaction.reply({content: 'Tag not found, make sure you used an autocomplete!',  flags: MessageFlags.Ephemeral})
 
         const fetchedmember = await interaction.guild.members.fetch(interaction.user.id)
-        // tag info
         if (interaction.options.getBoolean('view-info') == true) {
+            // tag info
             const taginfo = new ContainerBuilder();
             taginfo.setAccentColor(fetchedmember.displayColor || 0x5C146C);
-            tag.ranking = this.GetTagRanking(tag.key);
+            tag.ranking = GetTagRanking(tag.key);
 
             overview = new TextDisplayBuilder().setContent(
                 [
@@ -174,7 +118,9 @@ module.exports = {
 
             const tagusage = new TextDisplayBuilder().setContent(
                 [
-                    heading('Usage', HeadingLevel.Two),
+                    heading('Additional Info', HeadingLevel.Two),
+                    `This tag is ${!tag.pinned ? 'not ' : ''}pinned (it appears in the autocomplete list automatically)`,
+                    heading('Usage', HeadingLevel.Three),
                     `This tag has been used ${tag.uses ?? 'unknown'} times, which makes it the #${tag.ranking ?? '?'} most used tag.`,
                 ].join('\n')
             )
@@ -183,20 +129,19 @@ module.exports = {
 
             await interaction.reply({ components: [taginfo], flags: MessageFlags.Ephemeral+MessageFlags.IsComponentsV2 });
         } else {
+            tag.member = fetchedmember
             // tag
-            tag.content = tag.content.replaceAll('\\n', '\n');
-            
-            const tagEmbed = new EmbedBuilder()
-                .setColor(fetchedmember.displayColor || 0x5C146C)
-                .setDescription(tag.content + '\n\n' + subtext(userMention(interaction.member.user.id) + `used the tag "${tag.key.replaceAll('-', ' ')}"`))
+            const tagEmbed = TagEmbedBuilder(tag)
     
             const payload = {
                 content: (interaction.options.getMember('mention') ? interaction.options.getMember('mention').toString() : null),
                 embeds: [tagEmbed],
                 flags: (interaction.options.getBoolean('private') ? MessageFlags.Ephemeral : null),
             };
+
             await interaction.reply(payload);
-            this.IncreaseTagUsage(tag.key);
+
+            IncreaseTagUsage(tag.key);
         }
     }
 };

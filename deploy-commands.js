@@ -2,7 +2,7 @@
 Some contents in this file were sourced from https://github.com/discordjs/guide, which is licensed under the MIT License, which you can find @ https://mit-license.org/
 */
 const { REST, Routes } = require('discord.js');
-const { clientId, token, debug, debugclientId, debugtoken } = require('./config.json');
+const { clientId, token, debug, debugclientId, debugtoken, guildId } = require('./config.json');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -33,20 +33,33 @@ for (const folder of commandFolders) {
 // Construct and prepare an instance of the REST module
 const rest = new REST().setToken(debug ? debugtoken : token);
 
-// and deploy your commands!
-(async () => {
-	try {
-		console.log(`Started refreshing ${commands.length} application (/) commands.`);
+const deleteAll = false; // set to true to delete all commands!!
+if (deleteAll == true) {
+	rest.put(Routes.applicationCommands(debug ? debugclientId : clientId), { body: [] })
+		.then(() => console.log('Successfully deleted all application commands.'))
+		.catch(console.error);
 
-		// The put method is used to fully refresh all commands in the guild with the current set
-		const data = await rest.put(
-            Routes.applicationCommands(debug ? debugclientId : clientId),
-			{ body: commands },
-        );
+	rest.put(Routes.applicationGuildCommands(debug ? debugclientId : clientId, guildId), { body: [] })
+	.then(() => console.log('Successfully deleted all guild commands.'))
+	.catch(console.error);
+}
 
-		console.log(`Successfully reloaded ${data.length} application (/) commands.`);
-	} catch (error) {
-		// And of course, make sure you catch and log any errors!
-		console.error(error);
-	}
-})();
+const deployCommands = true;
+if (deployCommands) {
+	(async () => {
+		try {
+			console.log(`Started refreshing ${commands.length} application (/) commands.`);
+
+			// The put method is used to fully refresh all commands in the guild with the current set
+			const data = await rest.put(
+				Routes.applicationCommands(debug ? debugclientId : clientId),
+				{ body: commands },
+			);
+
+			console.log(`Successfully reloaded ${data.length} application (/) commands.`);
+		} catch (error) {
+			// And of course, make sure you catch and log any errors!
+			console.error(error);
+		}
+	})();
+}
